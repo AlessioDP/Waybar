@@ -99,10 +99,15 @@ void waybar::modules::Backlight::BacklightDev::set_max(int max) { max_ = max; }
 
 waybar::modules::Backlight::Backlight(const std::string &name,
                                       const Json::Value &config)
-    : ALabel(config, "{}", 2), name_(name),
+    : ALabel(config, "{}", 2),
+      name_(name),
+      scrolling_(false),
       preferred_device_(
           config["device"].isString() ? config["device"].asString() : "") {
   label_.set_name("backlight");
+
+  event_box_.add_events(Gdk::SCROLL_MASK | Gdk::SMOOTH_SCROLL_MASK);
+  event_box_.signal_scroll_event().connect(sigc::mem_fun(*this, &Backlight::handleScroll));
 
   udev_thread_ = [this] {
     std::unique_ptr<udev, UdevDeleter> udev{udev_new()};
@@ -214,6 +219,49 @@ auto waybar::modules::Backlight::update() -> void {
     label_.set_markup("");
   }
   previous_best_ = best == nullptr ? std::nullopt : std::optional{*best};
+}
+
+bool waybar::modules::Backlight::handleScroll(GdkEventScroll *e) {
+  bool direction_up = false;
+
+  // Avoid concurrent scroll event
+  if (scrolling_) {
+    return false;
+  }
+  scrolling_ = true;
+
+  uint16_t change = config_["scroll-step"].isUInt() ? config_["scroll-step"].asUInt() : 5;
+
+  if (e->direction == GDK_SCROLL_UP) {
+    direction_up = true;
+  }
+  if (e->direction == GDK_SCROLL_DOWN) {
+    direction_up = false;
+  }
+  if (e->direction == GDK_SCROLL_SMOOTH) {
+    gdouble delta_x, delta_y;
+    gdk_event_get_scroll_deltas(reinterpret_cast<const GdkEvent *>(e), &delta_x, &delta_y);
+    if (delta_y < 0) {
+      direction_up = true;
+    } else if (delta_y > 0) {
+      direction_up = false;
+    }
+  }
+
+  if (direction_up) {
+    /* WIP - Increase
+    if ({ACTUAL} + 1 < 100)  {
+      {INCREASE ACTUAL}
+    }
+    */
+  } else {
+    /* WIP - Decrease
+    if ({ACTUAL} - 1 > 0) {
+      {DECREASE ACTUAL}
+    }
+    */
+  }
+  return true;
 }
 
 template <class ForwardIt>
